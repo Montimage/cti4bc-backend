@@ -704,55 +704,8 @@ def new_security_alert(message, topic):
             soar_message = future_soar_message.result()
         
         # Process RISK4BC data
-        # TODO Use parse_risk_message_to_attributes function instead of manual parsing
         if risk_message is not None:
-            likelihood = None
-            consequence = None
-            # Extract likelihood and consequence - handle both dictionary and list formats
-            bowtie_values = risk_message.get('bowtieValues', [])
-            if isinstance(bowtie_values, list) and len(bowtie_values) > 0:
-                if isinstance(bowtie_values[0], dict):
-                    # Dictionary format
-                    likelihood = bowtie_values[0].get('likelihood')
-                    consequence = bowtie_values[0].get('consequence')
-            elif isinstance(bowtie_values, dict):
-                # Handle case where bowtieValues might be a dictionary instead of a list
-                for key, value in bowtie_values.items():
-                    if isinstance(value, dict):
-                        likelihood = value.get('likelihood')
-                        consequence = value.get('consequence')
-                        break
-                
-            # Add likelihood and consequence to event data
-            if likelihood is not None and consequence is not None:
-                risk_attributes.append({
-                    'type': 'text',
-                    'category': 'Other',
-                    'value': f'Likelihood: {likelihood}, Consequence: {consequence}',
-                    'comment': 'Risk assessment values',
-                    'to_ids': False
-                })
-            
-            # Add cascade information - safely handle both list and dict types
-            cascades = risk_message.get('cascades', [])
-            if isinstance(cascades, list):
-                for cascade in cascades:
-                    risk_attributes.append({
-                        'type': 'text',
-                        'category': 'Other',
-                        'value': f'Cascade effect: {cascade}',
-                        'comment': 'Cascade information',
-                        'to_ids': False
-                    })
-            elif isinstance(cascades, dict):
-                for key, cascade in cascades.items():
-                    risk_attributes.append({
-                        'type': 'text',
-                        'category': 'Other',
-                        'value': f'Cascade effect: {cascade}',
-                        'comment': 'Cascade information',
-                        'to_ids': False
-                    })
+            risk_attributes = parse_risk_message_to_attributes(risk_message)
         
         # Process SOAR4BC data
         if soar_message is not None:

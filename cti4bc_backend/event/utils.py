@@ -234,7 +234,7 @@ def parse_risk_message_to_attributes(risk_message: dict) -> list[dict]:
             attrs.append({
                 'type': 'text',
                 'category': 'Other',
-                'value': f'Cascade effect: {cascade}',
+                'value': f'{cascade.get("name", "N/A")}',
                 'comment': 'Cascade information',
                 'to_ids': False
             })
