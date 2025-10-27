@@ -289,24 +289,14 @@ class ShareEventView(APIView):
                 'details': sharing_results
             }, status=500)
         
-        # Use the same timezone as the arrival date for the sharing date
-        now = datetime.now()
-        
-        # If the arrival date has a time zone defined, use this time zone for sharing
-        if event_backend.arrival_time and event_backend.arrival_time.tzinfo:
-            # Convert the current date to the same time zone as arrival_time
-            tzinfo = event_backend.arrival_time.tzinfo
-            now_with_tz = now.replace(tzinfo=pytz.UTC).astimezone(tzinfo)
-            now_time = now_with_tz
-        else:
-            # Else use Django's default time zone
-            now_time = timezone.now()
+        # Use the same UTC as the arrival date for the sharing date
+        sharing_time = timezone.now()
         
         # Update event status and create share log
-        event_backend.timeliness = now_time - event_backend.arrival_time if event_backend.arrival_time else None
+        event_backend.timeliness = sharing_time - event_backend.arrival_time if event_backend.arrival_time else None
         event_backend.anon_time = anon_time
         event_backend.shared = True
-        event_backend.shared_at = now_time
+        event_backend.shared_at = sharing_time
         event_backend.save()
 
         # Create share log with the correctly formatted MISP data and the sharing results
@@ -315,7 +305,7 @@ class ShareEventView(APIView):
             event=event_backend,
             shared_by=request.user,
             data=misp_event_data,
-            shared_at=now_time
+            shared_at=sharing_time
         )
 
         # Return a success response with details of which servers successfully received the event
