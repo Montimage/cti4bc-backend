@@ -14,7 +14,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.http import JsonResponse
 from .serializers import EventSerializer, ShareEventSerializer
-from .utils import consume_last_message, preprocess_soar_message_into_attributes, parse_risk_message_to_attributes, parse_alert_message
+from .utils import consume_last_message, parse_soar_playbook_into_attributes, parse_risk_message_to_attributes, parse_alert_message, parse_soar_result
 import re
 from django.utils import timezone
 import concurrent.futures
@@ -86,11 +86,7 @@ class GetEventById(APIView):
             aware_attributes = attributes.get('AWARE4BC', [])
             risk_attributes = attributes.get('RISK4BC', [])
             soar_attributes = attributes.get('SOAR4BC', [])
-            
-            all_attributes = []
-            all_attributes.extend(aware_attributes)
-            all_attributes.extend(risk_attributes)
-            all_attributes.extend(soar_attributes)
+            soar_result_attributes = attributes.get('SOAR4BC_RESULT', [])
 
             response_data = {
                 'event': {
@@ -101,10 +97,10 @@ class GetEventById(APIView):
                 },
                 'files': list(attachments),
                 'attributes': {
-                    'all': all_attributes,
                     'aware': aware_attributes,
                     'risk': risk_attributes,
-                    'soar': soar_attributes
+                    'soar': soar_attributes,
+                    'soar_result': soar_result_attributes
                 }
             }
             return Response(response_data, status=200)
@@ -116,7 +112,6 @@ class GetEventById(APIView):
 class ShareEventView(APIView):
     permission_classes = [IsAuthenticated]
     def post(self, request, id):
-        print(request.data)
         event_backend = get_object_or_404(Event, id=id)
         if not request.user.is_staff:
             user_organizations = request.user.organizations.all()
@@ -177,7 +172,6 @@ class ShareEventView(APIView):
         init_anon_time = datetime.now()
 
         # Get date and log it
-        logging.info(f"Original event date: {data.get('date', 'N/A')}")
         data = anonymization.generelize_date(data)
         # Anonymization module configuration
         if not configure_anonymization_module():
@@ -190,6 +184,7 @@ class ShareEventView(APIView):
         # Add risk and soar attributes to the attributes list
         attributes_list.extend(original_attributes.get('RISK4BC', []))
         attributes_list.extend(original_attributes.get('SOAR4BC', []))
+        attributes_list.extend(original_attributes.get('SOAR4BC_RESULT', []))
 
         # Validate and process artifacts to include as MISP attributes
         artifacts_list = data.get('artifacts', [])
@@ -497,7 +492,8 @@ def new_security_alert(message, topic):
         # Create attributes separately
         aware_attributes = []
         risk_attributes = []
-        soar_attributes = []
+        soar_playbook_attributes = []
+        soar_result_attributes = []
         
         # Add AWARE4BC attributes
         
@@ -664,13 +660,11 @@ def new_security_alert(message, topic):
         
         # Simulation information
         simulated_or_real = parsed_alert.get('simulated_or_real', '')
-        if simulated_or_real:
-            simulation_type = "Simulated attack" if "Simulated attack" in simulated_or_real else "Real attack"
+        if simulated_or_real and "Simulated attack" in simulated_or_real:
             aware_attributes.append({
                 'category': 'Other',
                 'type': 'text',
                 'value': simulated_or_real,
-                'comment': simulation_type,
                 'to_ids': False
             })
         
@@ -692,27 +686,33 @@ def new_security_alert(message, topic):
         risk_topic_temp = "RISKM4BC.riskProfile"
         risk_topic = f"{organization.prefix}.{risk_topic_temp}"
         
-        soar_topic_temp = "SOAR4BC.playbook"
-        soar_topic = f"{organization.prefix}.{soar_topic_temp}"
+        soar_playbook_temp = "SOAR4BC.playbook"
+        soar_playbook_topic = f"{organization.prefix}.{soar_playbook_temp}"
+
+        soar_result_temp = "SOAR4BC.result"
+        soar_result_topic = f"{organization.prefix}.{soar_result_temp}"
         
         # Parallel calls to consume Kafka messages
         with concurrent.futures.ThreadPoolExecutor() as executor:
             future_risk_message = executor.submit(consume_last_message, risk_topic)
-            future_soar_message = executor.submit(consume_last_message, soar_topic)
+            future_soar_playbook_message = executor.submit(consume_last_message, soar_playbook_topic)
+            future_soar_result_message = executor.submit(consume_last_message, soar_result_topic)
             
             risk_message = future_risk_message.result()
-            soar_message = future_soar_message.result()
+            soar_playbook_message = future_soar_playbook_message.result()
+            soar_result_message = future_soar_result_message.result()
         
         # Process RISK4BC data
         if risk_message is not None:
             risk_attributes = parse_risk_message_to_attributes(risk_message)
         
-        # Process SOAR4BC data
-        if soar_message is not None:
-            soar_attributes = preprocess_soar_message_into_attributes(soar_message)
+        # Process SOAR4BC playbook data
+        if soar_playbook_message is not None:
+            soar_playbook_attributes = parse_soar_playbook_into_attributes(soar_playbook_message)
         
-        # Calculate total number of attributes
-        total_attributes = len(aware_attributes) + len(risk_attributes) + len(soar_attributes)
+        # Process SOAR4BC result data
+        if soar_result_message is not None:
+            soar_result_attributes = parse_soar_result(soar_result_message)
         
         # Create strict MISP format data (without Attribute field in the main structure)
         misp_format_data = {
@@ -723,7 +723,6 @@ def new_security_alert(message, topic):
             'date': formatted_date,
             'published': False,
             'analysis': '0',  # Default: Initial
-            'attribute_count': str(total_attributes),
             'timestamp': unix_timestamp,
             'sharing_group_id': '1',
             'proposal_email_lock': False,
@@ -741,7 +740,8 @@ def new_security_alert(message, topic):
         internal_data['Attribute'] = {
             'AWARE4BC': aware_attributes,
             'RISK4BC': risk_attributes,
-            'SOAR4BC': soar_attributes
+            'SOAR4BC': soar_playbook_attributes,
+            'SOAR4BC_RESULT': soar_result_attributes
         }
         
         finish_extension_time = datetime.now()
@@ -812,9 +812,41 @@ class UpdatePlaybookView(APIView):
             if soar_message is None:
                 return Response(status=204)
             else:
-                soar_attributes = preprocess_soar_message_into_attributes(soar_message)
+                soar_attributes = parse_soar_playbook_into_attributes(soar_message)
                 event.data['Attribute']['SOAR4BC'] = soar_attributes
                 event.save()
                 return Response({'Attribute': {'SOAR4BC': soar_attributes}}, status=200)
         except Exception as e:
             return Response({"error": f"Failed to fetch SOAR4BC: {str(e)}"}, status=500)
+
+class UpdateSoarResultView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, id):
+        """
+        Retrieves the latest SOAR4BC result data for the event
+        updates the event's data with new SOAR4BC_RESULT attributes.
+        """
+
+        event = get_object_or_404(Event, id=id)
+
+        # Authorization check
+        if not request.user.is_staff:
+            user_organizations = request.user.organizations.all()
+            if not user_organizations.filter(id=event.organization.id).exists():
+                return Response({'error': 'Unauthorized'}, status=403)
+        
+        org = event.organization
+        topic = f"{org.prefix}.SOAR4BC.result"
+
+        try:
+            soar_result_message = consume_last_message(topic)
+            if soar_result_message is None:
+                return Response(status=204)
+            else:
+                soar_result_attributes = parse_soar_result(soar_result_message)
+                event.data['Attribute']['SOAR4BC_RESULT'] = soar_result_attributes
+                event.save()
+                return Response({'Attribute': {'SOAR4BC_RESULT': soar_result_attributes}}, status=200)
+        except Exception as e:
+            return Response({"error": f"Failed to fetch SOAR4BC_RESULT: {str(e)}"}, status=500)

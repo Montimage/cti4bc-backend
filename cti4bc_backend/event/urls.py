@@ -10,4 +10,5 @@ urlpatterns = [
     path('update-share-status/<int:id>/', views.UpdateEventShareStatusView.as_view(), name='update_share_status'),
     path('update_risk_profile/<int:id>/', views.UpdateRiskProfileView.as_view(), name='update_risk_profile'),
     path('update_playbook/<int:id>/', views.UpdatePlaybookView.as_view(), name='update_playbook'),
+    path('update_system_reaction/<int:id>/', views.UpdateSoarResultView.as_view(), name='update_system_reaction'),
 ]

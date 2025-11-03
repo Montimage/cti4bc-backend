@@ -50,6 +50,7 @@ class AttributeSerializer(serializers.Serializer):
     RISK4BC = AttributeDetailSerializer(many=True, required=False, default=[])
     SOAR4BC = AttributeDetailSerializer(many=True, required=False, default=[])
     AWARE4BC = AttributeDetailSerializer(many=True, required=False, default=[])
+    SOAR4BC_RESULT = AttributeDetailSerializer(many=True, required=False, default=[])
 
 class PlaybookSerializer(serializers.Serializer):
     type = serializers.CharField()

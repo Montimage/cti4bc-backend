@@ -122,7 +122,7 @@ def parse_alert_message(message):
         })
         return result
 
-def preprocess_soar_message_into_attributes(data):
+def parse_soar_playbook_into_attributes(data):
     """
     Parses the SOAR4BC message of a cacao v2 playbook into MISP attributes.
     Args:
@@ -142,54 +142,28 @@ def preprocess_soar_message_into_attributes(data):
             if not isinstance(node, dict):
                 # Skip if node isn't a dictionary
                 continue
-                
+            node_type = node.get('type', 'unknown')
+            if node_type != 'action':
+                continue  # Only process action nodes for now 
             attribute = {
                 'type': 'text',
                 'category': 'Internal reference',
-                'value': f"Node ID: {node_id}, Name: {node.get('name', 'Unknown')}, Type: {node.get('type', 'Unknown')}",
-                'comment': f"Workflow step details: {node.get('description', 'No description available')}",
+                'value': f"{node.get('name', 'Unknown')}",
+                'comment': f"{node.get('description', '')}",
                 'to_ids': False
             }
 
             # Add additional relationships for actions
-            if node.get('type') == 'action':
-                commands = []
-                if isinstance(node.get('commands', []), list):
-                    commands = ", ".join(
-                        cmd.get("type", "unknown") if isinstance(cmd, dict) else str(cmd)
-                        for cmd in node.get("commands", [])
-                    )
-                agent = node.get("agent", "unknown agent")
-                attribute["value"] += f", Commands: {commands}, Agent: {agent}"
-            
-            # Add the next step, if present
-            if "on_completion" in node:
-                attribute["comment"] += f" Next step: {node['on_completion']}"
+            commands = []
+            if isinstance(node.get('commands', []), list):
+                commands = ", ".join(
+                    cmd.get("type", "unknown") if isinstance(cmd, dict) else str(cmd)
+                    for cmd in node.get("commands", [])
+                )
+            agent = node.get("agent", "unknown agent")
+            attribute["value"] += f", Commands: {commands}, Agent: {agent}"
 
             attributes.append(attribute)
-    elif isinstance(workflow, list):
-        # List case - create simple attributes from the items
-        for i, item in enumerate(workflow):
-            if isinstance(item, dict):
-                # If the item is a dict, extract structured information
-                attribute = {
-                    'type': 'text',
-                    'category': 'Internal reference',
-                    'value': f"Node {i}, Name: {item.get('name', 'Unknown')}, Type: {item.get('type', 'Unknown')}",
-                    'comment': f"Workflow step details: {item.get('description', 'No description available')}",
-                    'to_ids': False
-                }
-            else:
-                # If the item is not a dict, just store its string representation
-                attribute = {
-                    'type': 'text',
-                    'category': 'Internal reference',
-                    'value': f"Workflow item {i}: {str(item)}",
-                    'comment': f"Workflow item",
-                    'to_ids': False
-                }
-            attributes.append(attribute)
-     
     return attributes
 
 def parse_risk_message_to_attributes(risk_message: dict) -> list[dict]:
@@ -248,3 +222,52 @@ def parse_risk_message_to_attributes(risk_message: dict) -> list[dict]:
                 'to_ids': False
             })
     return attrs
+
+def dict_to_text(data: dict) -> str:
+    """
+    Convert a dictionary to a formatted text string.
+    """
+    lines = []
+    for key, value in data.items():
+        lines.append(f"{key}: {value}")
+    return ", ".join(lines)
+
+def parse_soar_result(soar_message: dict) -> list[dict]:
+    """
+    Turn a SOAR4BC result message into a MISP attribute
+    """
+    payload = {
+        'kind': 'soar-reaction'
+    }
+
+    target = soar_message.get('target_ip', None)
+    details = soar_message.get('details', None)
+    action = soar_message.get('action', None)
+    status = soar_message.get('status', None)
+    timestamp = soar_message.get('timestamp', None)
+    human_in_the_loop = soar_message.get('human_in_the_loop', None)
+    decision = soar_message.get('human_in_the_loop_decision', None)
+
+    if target:
+        payload['target_ip'] = target
+    if details:
+        payload['details'] = details
+    if action:
+        payload['action'] = action
+    if status:
+        payload['status'] = status
+    if timestamp:
+        payload['timestamp'] = timestamp
+    if human_in_the_loop is not None:
+        payload['human_in_the_loop'] = human_in_the_loop
+    if decision is not None:
+        payload['human_in_the_loop_decision'] = decision
+
+    attribute = {
+        'type': 'text',
+        'category': 'Other',
+        'value': dict_to_text(payload),
+        'comment': 'SOAR4BC reaction result',
+        'to_ids': False
+    }
+    return [attribute]
