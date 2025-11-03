@@ -42,7 +42,7 @@ class AttributeDetailSerializer(serializers.Serializer):
     type = serializers.CharField()
     value = serializers.CharField()
     to_ids = serializers.BooleanField()
-    comment = serializers.CharField(allow_blank=True)
+    comment = serializers.CharField(allow_blank=True, required=False)
     category = serializers.CharField()
     action = serializers.DictField(required=False)
 
