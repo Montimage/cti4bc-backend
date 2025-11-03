@@ -680,7 +680,6 @@ def new_security_alert(message, topic):
             })
         
         # Get complementary information from RISK4BC and SOAR4BC
-        init_extension_time = datetime.now()
         
         # Configure topics
         risk_topic_temp = "RISKM4BC.riskProfile"
@@ -698,13 +697,15 @@ def new_security_alert(message, topic):
             future_soar_playbook_message = executor.submit(consume_last_message, soar_playbook_topic)
             future_soar_result_message = executor.submit(consume_last_message, soar_result_topic)
             
+            risk_start = datetime.now()
             risk_message = future_risk_message.result()
+            # Process RISK4BC data
+            if risk_message is not None:
+                risk_attributes = parse_risk_message_to_attributes(risk_message)
+            risk_end = datetime.now()
+            risk_extension_time = risk_end - risk_start
             soar_playbook_message = future_soar_playbook_message.result()
             soar_result_message = future_soar_result_message.result()
-        
-        # Process RISK4BC data
-        if risk_message is not None:
-            risk_attributes = parse_risk_message_to_attributes(risk_message)
         
         # Process SOAR4BC playbook data
         if soar_playbook_message is not None:
@@ -744,8 +745,7 @@ def new_security_alert(message, topic):
             'SOAR4BC_RESULT': soar_result_attributes
         }
         
-        finish_extension_time = datetime.now()
-        extension_time = finish_extension_time - init_extension_time
+        extension_time = risk_extension_time
         
         # Create and save the event with our internal data format
         event = Event(data=internal_data, shared=False, organization=organization, arrival_time=arrival_time, extension_time=extension_time)

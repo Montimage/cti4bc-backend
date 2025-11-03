@@ -203,24 +203,14 @@ def parse_risk_message_to_attributes(risk_message: dict) -> list[dict]:
 
     # Add cascade information - safely handle both list and dict types
     cascades = risk_message.get('cascades', [])
-    if isinstance(cascades, list):
-        for cascade in cascades:
-            attrs.append({
-                'type': 'text',
-                'category': 'Other',
-                'value': f'{cascade.get("name", "N/A")}',
-                'comment': 'Cascade information',
-                'to_ids': False
-            })
-    elif isinstance(cascades, dict):
-        for _, cascade in cascades.items():
-            attrs.append({
-                'type': 'text',
-                'category': 'Other',
-                'value': f'Cascade effect: {cascade}',
-                'comment': 'Cascade information',
-                'to_ids': False
-            })
+    for cascade in cascades:
+        attrs.append({
+            'type': 'text',
+            'category': 'Other',
+            'value': f'{cascade.get("name", "N/A")}',
+            'comment': 'Cascade information',
+            'to_ids': False
+        })
     return attrs
 
 def dict_to_text(data: dict) -> str:
