@@ -21,6 +21,31 @@ class Organization(models.Model):
     external_id = models.CharField(max_length=100, null=False)
     prefix = models.CharField(max_length=10, unique=True, null=False)
     users = models.ManyToManyField(User, blank=True, related_name='organizations')
+    sectors = models.ManyToManyField('Sector', blank=True, related_name='organizations')
+
+    def __str__(self):
+        return self.name
+
+
+class Sector(models.Model):
+    """
+    NIS2 sector of activity. `annex` distinguishes the two directive categories:
+    'essential' (Annex I / highly critical) and 'important' (Annex II / other critical).
+    An organization may operate in several sectors.
+    """
+    ESSENTIAL = 'essential'
+    IMPORTANT = 'important'
+    ANNEX_CHOICES = [
+        (ESSENTIAL, 'Essential (Annex I)'),
+        (IMPORTANT, 'Important (Annex II)'),
+    ]
+
+    code = models.SlugField(max_length=64, unique=True)
+    name = models.CharField(max_length=128)
+    annex = models.CharField(max_length=16, choices=ANNEX_CHOICES, default=ESSENTIAL)
+
+    class Meta:
+        ordering = ['annex', 'name']
 
     def __str__(self):
         return self.name

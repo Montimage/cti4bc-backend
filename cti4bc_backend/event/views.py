@@ -31,25 +31,28 @@ logger = logging.getLogger(__name__)
 class GetEventsView(APIView):
     permission_classes = [IsAuthenticated]
     def get(self, request):
+        # Prefetch organization + its NIS2 sectors to avoid N+1 queries
+        base_qs = Event.objects.select_related('organization').prefetch_related('organization__sectors')
         # Superusers can see all events
         if request.user.is_staff:
-            events = Event.objects.all()
+            events = base_qs.all()
         else:
             # Regular users can only see events from their organizations
             user_organizations = request.user.organizations.all()
             if user_organizations.exists():
-                events = Event.objects.filter(organization__in=user_organizations)
+                events = base_qs.filter(organization__in=user_organizations)
             else:
                 return JsonResponse({'events': []}, status=200)
 
         event_data = [{
-            'id': event.id, 
-            'shared': event.shared, 
-            'info': event.data.get('info'), 
+            'id': event.id,
+            'shared': event.shared,
+            'info': event.data.get('info'),
             'threat_level_id': event.data.get('threat_level_id'),
             'date': event.arrival_time.strftime('%Y-%m-%d %H:%M:%S') if event.arrival_time else event.data.get('date'),
             'organization': event.organization.name,
             'organization_id': event.organization.id,
+            'sectors': [s.name for s in event.organization.sectors.all()],
             'shared_at': event.shared_at.strftime('%Y-%m-%d %H:%M:%S') if event.shared_at else None} for event in events]
         return JsonResponse({'events': event_data}, status=200)
 
