@@ -13,7 +13,9 @@ services:
       - "5432:5432"
 
   web:
-    build: .
+    build:
+      context: ..
+      dockerfile: cti4bc-backend/Dockerfile
     command: ["python", "/app/cti4bc_backend/manage.py", "runserver", "0.0.0.0:8000"]
     volumes:
       - .:/app

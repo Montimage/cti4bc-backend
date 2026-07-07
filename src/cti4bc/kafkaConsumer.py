@@ -42,18 +42,22 @@ class KafkaConsumerThread:
             consumer.subscribe(self.topics)
             
             try:
-                # Seek to the next offset for all partitions
-                logging.info("Initial polling to get partition assignments")
-                consumer.poll(timeout_ms=10000)
-                for topic in self.topics:
-                    partitions = consumer.partitions_for_topic(topic)
-                    if partitions:
-                        logging.info(f"Found partitions for topic {topic}: {partitions}")
-                        for partition in partitions:
-                            tp = TopicPartition(topic, partition)
-                            consumer.seek_to_end(tp)
-                            logging.info(f"Seeking to end for topic {topic}, partition {partition}")
-                
+                # Wait until the broker actually assigns the partitions, then jump to
+                # the end of the log (backlog is intentionally skipped). Assignment
+                # resolves in well under a second, so this replaces the old fixed 10s
+                # poll whose startup window used to swallow the very first message
+                # produced right after the consumer was started.
+                assigned = False
+                waited = 0.0
+                while not self.stop_event.is_set() and not assigned and waited < 30.0:
+                    consumer.poll(timeout_ms=250)
+                    if consumer.assignment():
+                        consumer.seek_to_end()
+                        assigned = True
+                        logging.info(f"Partitions assigned, seeked to end: {list(consumer.assignment())}")
+                    else:
+                        waited += 0.25
+
                 logging.info("Starting main consumer loop")
                 while not self.stop_event.is_set():
                     msg_pack = consumer.poll(timeout_ms=1000)

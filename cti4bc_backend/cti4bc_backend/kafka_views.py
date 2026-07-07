@@ -6,12 +6,16 @@ from django.conf import settings
 from event.views import new_security_alert
 import json
 import threading
+import itertools
 from collections import deque
 
 # Global variables for message storage
 consumer_manager = None
 message_history = deque(maxlen=100)  # Store last 100 messages
 message_lock = threading.Lock()
+# Monotonic id so the UI can tell two identical-content messages apart and
+# reliably detect which entries are new (next() is atomic under the GIL).
+_message_seq = itertools.count(1)
 
 # Custom handler that saves messages to history
 def message_handler_with_history(message, topic):
@@ -34,6 +38,7 @@ def message_handler_with_history(message, topic):
             # Store in history with parsed JSON
             with message_lock:
                 message_entry = {
+                    'id': next(_message_seq),
                     'topic': topic,
                     'timestamp': parsed_message.get('timestamp', ''),
                     'message': parsed_message
@@ -43,6 +48,7 @@ def message_handler_with_history(message, topic):
             # Store as raw string if parsing fails
             with message_lock:
                 message_entry = {
+                    'id': next(_message_seq),
                     'topic': topic,
                     'timestamp': '',
                     'value': message  # Use 'value' for raw messages
@@ -54,6 +60,7 @@ def message_handler_with_history(message, topic):
         try:
             with message_lock:
                 message_entry = {
+                    'id': next(_message_seq),
                     'topic': topic,
                     'timestamp': '',
                     'value': str(message)  # Ensure it's a string

@@ -194,11 +194,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Or specify the allowed origins
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # React app address
+    "http://localhost:3001",  # React app address (alt port for local dev)
     'https://cti4bc.dynabic.dev',
 ]
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
+    "http://localhost:3001",
     'https://cti4bc.dynabic.dev',
     'https://cti4bc-backend.dynabic.dev',
 ]

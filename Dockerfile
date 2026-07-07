@@ -50,8 +50,8 @@ RUN pip install Cython==0.29.36
 
 RUN pip install -r requirements.txt --verbose
 
-# Copy project
-COPY . /app/
+# Copy project (build context is parent directory)
+COPY cti4bc-backend/ /app/
 
 # Install the src library in editable mode
 RUN pip install -e /app/src
