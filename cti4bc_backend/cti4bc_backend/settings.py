@@ -11,7 +11,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
-from decouple import Config, RepositoryEnv
+from decouple import Config, RepositoryEnv, Csv
 import os
 from datetime import timedelta
 import logging
@@ -45,12 +45,18 @@ django_logger.setLevel(logging.WARNING)
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-*fjfub%vj83t@rsw&qltjrk&95ka99bp@%1isjsem(r8e+9^bl')
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-change-me-in-production')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = ['cti4bc.dynabic.dev', '0.0.0.0', 'localhost', '127.0.0.1', 'cti4bc-backend.dynabic.dev', 'cti4bc-backend']
+# Comma-separated list of allowed hosts. Add your deployment domain(s) via the
+# ALLOWED_HOSTS env var, e.g. ALLOWED_HOSTS=cti4bc.example.com,api.example.com
+ALLOWED_HOSTS = config(
+    'ALLOWED_HOSTS',
+    default='localhost,127.0.0.1,0.0.0.0',
+    cast=Csv(),
+)
 
 
 # Application definition
@@ -170,7 +176,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'Europe/Paris'
+TIME_ZONE = config('TIME_ZONE', default='Europe/Paris')
 
 USE_I18N = True
 
@@ -192,19 +198,21 @@ STATICFILES_DIRS = [
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
-# Or specify the allowed origins
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # React app address
-    "http://localhost:3001",  # React app address (alt port for local dev)
-    'https://cti4bc.dynabic.dev',
-]
+# Allowed CORS origins (comma-separated). Add your frontend deployment URL(s)
+# via the CORS_ALLOWED_ORIGINS env var, e.g. https://cti4bc.example.com
+CORS_ALLOWED_ORIGINS = config(
+    'CORS_ALLOWED_ORIGINS',
+    default='http://localhost:3000,http://localhost:3001',
+    cast=Csv(),
+)
 
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    'https://cti4bc.dynabic.dev',
-    'https://cti4bc-backend.dynabic.dev',
-]
+# Trusted origins for CSRF (comma-separated). Add your deployment URL(s) via the
+# CSRF_TRUSTED_ORIGINS env var, e.g. https://cti4bc.example.com,https://cti4bc-backend.example.com
+CSRF_TRUSTED_ORIGINS = config(
+    'CSRF_TRUSTED_ORIGINS',
+    default='http://localhost:3000,http://localhost:3001',
+    cast=Csv(),
+)
 
 # Media files
 MEDIA_URL = '/media/'
@@ -230,8 +238,14 @@ KAFKA_SERVER = config('KAFKA_SERVER')
 KAFKA_USERNAME = config('KAFKA_USERNAME')
 KAFKA_PASSWORD = config('KAFKA_PASSWORD')
 
+# Google Apps Script Web App URL used to import Google Forms.
+# Deploy your own Apps Script (see cti4bc-gui/src/Forms/DEPLOYMENT_INSTRUCTIONS.md)
+# and set its /exec URL via the GOOGLE_APPS_SCRIPT_URL env var.
+GOOGLE_APPS_SCRIPT_URL = config('GOOGLE_APPS_SCRIPT_URL', default='')
+
 # AI/ML Configuration
 GEMINI_API_KEY = config('GEMINI_API_KEY', default=None)
+GEMINI_MODEL = config('GEMINI_MODEL', default='gemini-1.5-flash')
 
 # LLM Provider Configuration
 # Supports 'gemini' (cloud) or 'ollama' (local/kubernetes)

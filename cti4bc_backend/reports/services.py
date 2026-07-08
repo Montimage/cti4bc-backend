@@ -38,7 +38,9 @@ class GeminiService:
             )
         
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-1.5-flash')
+        # Model name is configurable via the GEMINI_MODEL env var
+        self.model_name = getattr(settings, 'GEMINI_MODEL', None) or 'gemini-1.5-flash'
+        self.model = genai.GenerativeModel(self.model_name)
     
     def generate_report(self, prompt: str, events: List[Event]) -> Dict[str, Any]:
         """
@@ -72,7 +74,7 @@ class GeminiService:
                 'generation_time': generation_time,
                 'success': True,
                 'provider': 'gemini',
-                'model': 'gemini-1.5-flash'
+                'model': self.model_name
             }
             
         except Exception as e:
@@ -83,7 +85,7 @@ class GeminiService:
                 'success': False,
                 'error': str(e),
                 'provider': 'gemini',
-                'model': 'gemini-1.5-flash'
+                'model': self.model_name
             }
     
     def _build_events_context(self, events: List[Event]) -> str:

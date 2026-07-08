@@ -1,5 +1,4 @@
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from .models import Event, Organization, EventShareLog
 from event_files.models import EventAttachment
 import json
@@ -325,25 +324,31 @@ def configure_anonymization_module():
         return False
 
     
-@csrf_exempt # This decorator is used to exempt the view from CSRF verification TODO Delete in production
 # Endpoint for aggregation of events
-def aggregate(request):
-    if request.method == 'POST':
-        try:
-            # Parse the JSON data from the request body and retrieve the events' ids
-            data = json.loads(request.body.decode('utf-8'))
-            event_ids = data.get('eventsId', [])
-  
-            events = Event.objects.filter(id__in=event_ids) # Retrieve the events from the database
-            event_ids = [event.id for event in events] # Retrieve ids of found events
-            events_data = [event.data for event in events] # Retrieve data of found events
+class AggregateEventsView(APIView):
+    permission_classes = [IsAuthenticated]
 
-            new_event = aggregation.aggregate(events_data) # Aggregate the events
-            return JsonResponse({'message': 'Aggregation completed.', 'data': new_event, 'eventsId': event_ids}, status=200)
-        except json.JSONDecodeError:
-            return JsonResponse({'error': 'Invalid JSON data'}, status=400)
-    else:
-        return JsonResponse({'error': 'Invalid request method'}, status=400)
+    def post(self, request):
+        # Event ids to aggregate (DRF parses the JSON body into request.data)
+        event_ids = request.data.get('eventsId', [])
+        if not isinstance(event_ids, list):
+            return Response({'error': 'eventsId must be a list'}, status=400)
+
+        # Scope events to what the user is allowed to see (same rule as GetEventsView)
+        base_qs = Event.objects.all()
+        if not request.user.is_staff:
+            user_organizations = request.user.organizations.all()
+            base_qs = base_qs.filter(organization__in=user_organizations)
+
+        events = base_qs.filter(id__in=event_ids)
+        found_ids = [event.id for event in events]  # ids actually found & permitted
+        events_data = [event.data for event in events]
+
+        new_event = aggregation.aggregate(events_data)  # Aggregate the events
+        return Response(
+            {'message': 'Aggregation completed.', 'data': new_event, 'eventsId': found_ids},
+            status=200,
+        )
 
 class RemoteIncidentView(APIView):
     permission_classes = [IsAuthenticated]

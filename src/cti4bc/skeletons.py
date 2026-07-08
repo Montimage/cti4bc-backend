@@ -12,8 +12,13 @@ it is like a black box with id and type properties.
 '''
 
 import copy
+import os
 from uuid import uuid4
 from time import time
+
+# Default URL used as the value of the "RISK EVALUATION" MISP attribute.
+# Override per deployment with the RISK_URL environment variable.
+_RISK_URL = os.environ.get('RISK_URL', 'http://risk.example.com')
 
 _SKELETONS = {
     'misp': {
@@ -34,7 +39,7 @@ _SKELETONS = {
             "object_relation": None,
             "first_seen": None,
             "last_seen": None,
-            "value": "http://risk.dynabic.eu",
+            "value": _RISK_URL,
             "Galaxy": [],
             "ShadowAttribute": []
         },

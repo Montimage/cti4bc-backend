@@ -1,6 +1,5 @@
 from django.shortcuts import render
 from .forms import PlaybookForm
-from django.views.decorators.csrf import csrf_exempt
 import json
 from django.http import JsonResponse
 
@@ -81,7 +80,6 @@ class PlaybookByEventView(APIView):
         }
         return Response(response_data, status=status.HTTP_200_OK)
 
-@csrf_exempt # This decorator is used to exempt the view from CSRF verification TODO Delete in production
 def get_by_event(request):
     if request.method == 'POST':
         try:

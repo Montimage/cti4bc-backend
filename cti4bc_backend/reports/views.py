@@ -1,4 +1,5 @@
 import logging
+from django.conf import settings
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -461,12 +462,12 @@ class LLMModelsView(APIView):
                     }, status=status.HTTP_400_BAD_REQUEST)
 
             elif provider == 'gemini':
-                # GeminiService is pinned to gemini-1.5-flash, so advertise only that
-                # (previously it also listed gemini-1.5-pro, which was never actually used).
+                # GeminiService uses the model configured via GEMINI_MODEL, so advertise only that.
+                gemini_model = getattr(settings, 'GEMINI_MODEL', None) or 'gemini-1.5-flash'
                 return Response({
                     'provider': provider,
-                    'available_models': ['gemini-1.5-flash'],
-                    'current_model': 'gemini-1.5-flash'
+                    'available_models': [gemini_model],
+                    'current_model': gemini_model
                 }, status=status.HTTP_200_OK)
 
             else:
@@ -525,14 +526,15 @@ def get_llm_status(request):
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         elif current_provider == 'gemini':
+            gemini_model = getattr(settings, 'GEMINI_MODEL', None) or 'gemini-1.5-flash'
             return Response({
                 'provider': current_provider,
                 'status': 'connected',
                 'configuration': {
-                    'model': 'gemini-1.5-flash',
+                    'model': gemini_model,
                     'environment': 'cloud'
                 },
-                'available_models': ['gemini-1.5-flash'],
+                'available_models': [gemini_model],
                 'error': None
             }, status=status.HTTP_200_OK)
 

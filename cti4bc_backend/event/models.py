@@ -13,7 +13,7 @@ class Event(models.Model):
         organization (ForeignKey): A reference to the associated organization.
         arrival_time (DateTimeField): An optional timestamp for when the event arrived.
         timeliness (DurationField): An optional duration representing the timeliness of the event. (Time since the event arrives until it is shared)
-        extension_time (DurationField): An optional duration for the extension time of the event. (Enrichment time with data from other DYNABIC components)
+        extension_time (DurationField): An optional duration for the extension time of the event. (Enrichment time with data from other platform components)
         anon_time (DurationField): An optional duration for the anonymization time of the event.
         sharing_speed (DurationField): An optional duration for the speed of sharing the event. (Connection time to the MISP server)
     """

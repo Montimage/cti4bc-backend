@@ -1,9 +1,7 @@
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from .models import AnonAttributes
 from django.http import FileResponse
 
-@csrf_exempt # This decorator is used to exempt the view from CSRF verification TODO Delete in production
 # Endpoint to retrieve an attribute by ID
 def get_by_id(request, id):
     if request.method == 'GET':

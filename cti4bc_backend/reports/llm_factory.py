@@ -9,6 +9,8 @@ and avoids read-modify-write races on the .env file.
 import logging
 from typing import Union
 
+from django.conf import settings
+
 from .services import GeminiService
 from .ollama_service import OllamaService
 
@@ -68,7 +70,7 @@ class LLMProviderFactory:
         if provider == 'ollama':
             return cls._config().ollama_model or 'llama3.1:8b'
         elif provider == 'gemini':
-            return 'gemini-1.5-flash'
+            return getattr(settings, 'GEMINI_MODEL', None) or 'gemini-1.5-flash'
         return 'unknown'
 
     # ---------------------------------------------------------------- services

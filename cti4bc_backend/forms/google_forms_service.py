@@ -4,13 +4,16 @@ import re
 from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse
 
+from django.conf import settings
+
 
 class GoogleFormsService:
     """Service to import Google Forms data via Google Apps Script API"""
-    
-    # URL of your deployed Google Apps Script Web App
-    # TODO: Replace with the actual URL of your deployed Web App
-    APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbw6H4_lPcl7XLkzLJ6zBj-abGWIUb94ravezu7Amd2FIKLqE2oQNYIH4B9FwpD_rdzh/exec"
+
+    # URL of the deployed Google Apps Script Web App.
+    # Configured per deployment via the GOOGLE_APPS_SCRIPT_URL env var
+    # (see cti4bc-gui/src/Forms/DEPLOYMENT_INSTRUCTIONS.md).
+    APPS_SCRIPT_WEB_APP_URL = getattr(settings, 'GOOGLE_APPS_SCRIPT_URL', '')
     
     @staticmethod
     def extract_form_id(url: str) -> Optional[str]:
@@ -57,6 +60,13 @@ class GoogleFormsService:
             if not form_id:
                 raise Exception("Invalid Google Forms URL format. Please provide a valid Google Forms URL.")
             
+            # Ensure the Apps Script endpoint is configured
+            if not GoogleFormsService.APPS_SCRIPT_WEB_APP_URL:
+                raise Exception(
+                    "Google Apps Script URL is not configured. "
+                    "Set the GOOGLE_APPS_SCRIPT_URL environment variable."
+                )
+
             # Call Google Apps Script Web App
             response = requests.post(
                 GoogleFormsService.APPS_SCRIPT_WEB_APP_URL,

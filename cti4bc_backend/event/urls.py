@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path('aggregate/', views.AggregateEventsView.as_view(), name='aggregate'),
     path('<int:id>/', views.GetEventById.as_view(), name='get_by_id'),
     path('', views.GetEventsView.as_view(), name='get_all'),
     path('share/<int:id>/', views.ShareEventView.as_view(), name='share_event'),
