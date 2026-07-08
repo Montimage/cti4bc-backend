@@ -30,5 +30,22 @@ services:
       - DB_HOST=db
       - DB_PORT=5432
 
+  # Django-Q2 worker: runs asynchronous report generation off the HTTP request cycle.
+  qcluster:
+    build:
+      context: ..
+      dockerfile: cti4bc-backend/Dockerfile
+    command: ["python", "/app/cti4bc_backend/manage.py", "qcluster"]
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+    environment:
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=db
+      - DB_PORT=5432
+
 volumes:
   postgres_data:

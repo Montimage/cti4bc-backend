@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     'ip_reputation',
     'forms',
     'reports',
+    'django_q',
 ]
 
 REST_FRAMEWORK = {
@@ -241,3 +242,18 @@ LLM_PROVIDER = config('LLM_PROVIDER', default='gemini')  # gemini, ollama
 # For Kubernetes deployment: http://open-webui-ollama:11434 (or your service name)
 OLLAMA_URL = config('OLLAMA_URL', default='http://localhost:11434')
 OLLAMA_MODEL = config('OLLAMA_MODEL', default='llama3.1:8b')
+
+# Django-Q2 task queue configuration
+# Uses the existing PostgreSQL database as the broker (ORM broker) — no Redis/Celery.
+# Report generation runs in the `qcluster` worker process, not in the HTTP request.
+Q_CLUSTER = {
+    'name': 'cti4bc',
+    'orm': 'default',              # use the default DB as the broker
+    'workers': 2,
+    'timeout': 900,                # 15 min hard cap per task (>= Ollama large-model timeout)
+    'retry': 1200,                 # must be > timeout so tasks are not re-queued mid-run
+    'max_attempts': 1,             # do not silently re-run an LLM generation
+    'save_limit': 250,
+    'catch_up': False,             # skip missed scheduled tasks after downtime
+    'label': 'Django Q2',
+}

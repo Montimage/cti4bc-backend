@@ -11,8 +11,8 @@ class ReportListSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Report
-        fields = ['id', 'title', 'content', 'events_count', 'user_name', 'created_at', 'updated_at',
-                 'tokens_used', 'generation_time', 'llm_provider', 'llm_model']
+        fields = ['id', 'title', 'content', 'status', 'error_message', 'events_count', 'user_name',
+                 'created_at', 'updated_at', 'tokens_used', 'generation_time', 'llm_provider', 'llm_model']
 
 
 class ReportDetailSerializer(serializers.ModelSerializer):
@@ -24,9 +24,9 @@ class ReportDetailSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Report
-        fields = ['id', 'title', 'prompt', 'generated_content', 'content', 'events', 'events_count', 
-                 'user_name', 'created_at', 'updated_at', 'tokens_used', 'generation_time',
-                 'llm_provider', 'llm_model']
+        fields = ['id', 'title', 'prompt', 'generated_content', 'content', 'status', 'error_message',
+                 'events', 'events_count', 'user_name', 'created_at', 'updated_at', 'tokens_used',
+                 'generation_time', 'llm_provider', 'llm_model']
     
     def get_events(self, obj):
         """Return comprehensive event information"""

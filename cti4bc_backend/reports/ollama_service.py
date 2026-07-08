@@ -302,20 +302,7 @@ Please generate a comprehensive report based on the above information."""
     def _estimate_tokens(self, text: str) -> int:
         """Rough estimation of tokens used (approximation: 1 token ≈ 4 characters)"""
         return len(text) // 4
-    
-    def get_available_models(self) -> List[str]:
-        """Get list of available models from Ollama"""
-        try:
-            with httpx.Client(timeout=10.0) as client:
-                response = client.get(f"{self.base_url}/api/tags")
-                if response.status_code == 200:
-                    data = response.json()
-                    return [model['name'] for model in data.get('models', [])]
-                return []
-        except Exception as e:
-            logger.error(f"Error getting Ollama models: {str(e)}")
-            return []
-    
+
     def is_model_available(self, model_name: str) -> bool:
         """Check if a specific model is available"""
         available_models = self.get_available_models()
