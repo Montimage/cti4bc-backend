@@ -45,10 +45,10 @@ django_logger.setLevel(logging.WARNING)
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-change-me-in-production')
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-me-in-production')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
+DEBUG = config('DEBUG', default='True').lower() == 'true'
 
 # Comma-separated list of allowed hosts. Add your deployment domain(s) via the
 # ALLOWED_HOSTS env var, e.g. ALLOWED_HOSTS=cti4bc.example.com,api.example.com
@@ -224,12 +224,15 @@ CORS_ALLOWED_CREDENTIALS = True
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_HTTPONLY = True
 
-MISP_URL = os.environ.get('MISP_URL')
-MISP_TOKEN = os.environ.get('MISP_TOKEN')
-SSL_CERT_PATH = os.environ.get('SSL_CERT_PATH')
-MISP_LIMIT = os.environ.get('MISP_LIMIT', '64')
+# Read via decouple `config` (same source as the KAFKA_* / FRONTEND_URL below)
+# so these are actually loaded from the .env file. decouple does NOT populate
+# os.environ, so os.environ.get() would always miss the .env values.
+MISP_URL = config('MISP_URL', default=None)
+MISP_TOKEN = config('MISP_TOKEN', default=None)
+SSL_CERT_PATH = config('SSL_CERT_PATH', default=None)
+MISP_LIMIT = config('MISP_LIMIT', default='64')
 # Option to disable SSL verification for MISP
-MISP_VERIFY_SSL = os.environ.get('MISP_VERIFY_SSL', 'False').lower() == 'true'
+MISP_VERIFY_SSL = config('MISP_VERIFY_SSL', default='False').lower() == 'true'
 
 FRONTEND_URL = config('FRONTEND_URL')
 CTI_REMOTE_TOPIC = config('CTI_REMOTE_TOPIC')
