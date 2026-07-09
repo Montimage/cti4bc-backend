@@ -249,24 +249,8 @@ class ShareEventView(APIView):
             'event_creator_email': event_backend.organization.email
         }
         
-        # Clean and format attributes for MISP compatibility
-        def clean_attribute_for_misp(attr):
-            """Clean attribute to ensure MISP compatibility"""
-            cleaned_attr = {}
-            for key, value in attr.items():
-                if isinstance(value, dict) and 'value' in value:
-                    cleaned_attr[key] = str(value['value'])
-                elif isinstance(value, bool):
-                    cleaned_attr[key] = value
-                else:
-                    cleaned_attr[key] = str(value) if value is not None else ""
-            return cleaned_attr
-
-        # Clean all attributes for MISP compatibility
-        clean_attributes_list = []
-        for attr in attributes_list:
-            clean_attr = clean_attribute_for_misp(attr)
-            clean_attributes_list.append(clean_attr)
+        # Clean all attributes for MISP compatibility (helper is module-level)
+        clean_attributes_list = [clean_attribute_for_misp(attr) for attr in attributes_list]
 
         # Create event data with cleaned attributes
         complete_event_data = dict(misp_event_data)
@@ -323,7 +307,20 @@ def configure_anonymization_module():
         logging.warning(f'Failed to configure anonymization module: PublicKey "CRYPTOGRAPHY" not found')
         return False
 
-    
+
+def clean_attribute_for_misp(attr):
+    """Clean an attribute dict so every value is MISP-compatible (string/bool)."""
+    cleaned_attr = {}
+    for key, value in attr.items():
+        if isinstance(value, dict) and 'value' in value:
+            cleaned_attr[key] = str(value['value'])
+        elif isinstance(value, bool):
+            cleaned_attr[key] = value
+        else:
+            cleaned_attr[key] = str(value) if value is not None else ""
+    return cleaned_attr
+
+
 # Endpoint for aggregation of events
 class AggregateEventsView(APIView):
     permission_classes = [IsAuthenticated]
@@ -349,6 +346,151 @@ class AggregateEventsView(APIView):
             {'message': 'Aggregation completed.', 'data': new_event, 'eventsId': found_ids},
             status=200,
         )
+
+
+class ShareAggregatedEventView(APIView):
+    """
+    Share an aggregated (virtual) event to MISP servers / organizations.
+
+    Unlike ShareEventView, the aggregate has no backing Event row, so the
+    request must carry both the aggregate payload (as produced by
+    AggregateEventsView -> `data`) and the source `eventsId`. The source events
+    are used to scope permissions and to resolve the sharing organization
+    identity (external_id / email). No EventShareLog is written (simple share).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        misp_server_ids = request.data.get('misp_server_ids', [])
+        org_ids = request.data.get('organization_ids', [])
+        if not misp_server_ids and not org_ids:
+            return Response({'error': 'No recipients specified for sharing.'}, status=400)
+
+        # Resolve source events (same scoping rule as AggregateEventsView) to get
+        # the organization identity used for the MISP event.
+        event_ids = request.data.get('eventsId', [])
+        if not isinstance(event_ids, list) or not event_ids:
+            return Response({'error': 'eventsId (source events of the aggregation) is required.'}, status=400)
+        base_qs = Event.objects.all()
+        if not request.user.is_staff:
+            base_qs = base_qs.filter(organization__in=request.user.organizations.all())
+        source_events = list(base_qs.filter(id__in=event_ids))
+        if not source_events:
+            return Response({'error': 'No permitted source events found for this aggregation.'}, status=400)
+        organization = source_events[0].organization
+
+        # Validate MISP servers (same access rule as ShareEventView).
+        misp_servers_info = []
+        if misp_server_ids:
+            misp_servers = MISPServer.objects.filter(id__in=misp_server_ids)
+            if not misp_servers.exists():
+                return Response({'error': 'No valid MISP servers found with the provided IDs.'}, status=400)
+            if not request.user.is_staff:
+                user_orgs = set(request.user.organizations.all())
+                for server in misp_servers:
+                    if user_orgs.isdisjoint(set(server.organizations.all())):
+                        return Response({'error': f'Unauthorized access to MISP server: {server.name}'}, status=403)
+            misp_servers_info = [{
+                'id': s.id, 'name': s.name, 'url': s.url, 'api_key': s.apikey
+            } for s in misp_servers]
+
+        orgs_info = []
+        if org_ids:
+            valid_orgs = Organization.objects.filter(id__in=org_ids)
+            if not valid_orgs.exists():
+                return Response({'error': 'No valid organizations found with the provided IDs.'}, status=400)
+            orgs_info = [{'id': o.id, 'name': o.name, 'prefix': o.prefix} for o in valid_orgs]
+
+        # Build the MISP event from the aggregate payload (same shape as ShareEventView).
+        # NB: unlike ShareEventView we do NOT call anonymization.generelize_date(): the
+        # aggregate carries a plain string `date` (not the {value, action} dict the manual
+        # share form produces), and date generalization is a manual-share option only.
+        data = request.data
+        original_attributes = data.get('Attribute', {}) or {}
+
+        if not configure_anonymization_module():
+            return Response({'error': 'Required encryption keys are missing. Event not shared.'}, status=400)
+
+        init_anon_time = datetime.now()
+        aware_attributes = original_attributes.get('AWARE4BC', [])
+        attributes_list = anonymization.process_attributes(aware_attributes)
+        attributes_list.extend(original_attributes.get('RISK4BC', []))
+        attributes_list.extend(original_attributes.get('SOAR4BC', []))
+        attributes_list.extend(original_attributes.get('SOAR4BC_RESULT', []))
+        anon_time = datetime.now() - init_anon_time
+
+        current_timestamp = int(datetime.now().timestamp())
+
+        # Normalize the date to YYYY-MM-DD for MISP.
+        date_value = data.get('date', datetime.now().strftime('%Y-%m-%d'))
+        if isinstance(date_value, dict) and 'value' in date_value:
+            date_value = date_value['value']
+        if isinstance(date_value, str):
+            try:
+                date_value = datetime.strptime(date_value.split(' ')[0], '%Y-%m-%d').strftime('%Y-%m-%d')
+            except (ValueError, IndexError):
+                date_value = datetime.now().strftime('%Y-%m-%d')
+        else:
+            date_value = datetime.now().strftime('%Y-%m-%d')
+
+        misp_event_data = {
+            'org_id': str(organization.external_id),
+            'distribution': data.get('distribution', '0'),
+            'info': data.get('info', 'Aggregated event'),
+            'orgc_id': str(organization.external_id),
+            'date': date_value,
+            'published': data.get('published', False),
+            'analysis': data.get('analysis', '0'),
+            'timestamp': str(current_timestamp),
+            'sharing_group_id': "1",
+            'proposal_email_lock': data.get('proposal_email_lock', False),
+            'locked': data.get('locked', False),
+            'threat_level_id': str(data.get('threat_level_id', '1')),
+            'publish_timestamp': str(current_timestamp),
+            'sighting_timestamp': str(current_timestamp),
+            'disable_correlation': data.get('disable_correlation', False),
+            'event_creator_email': organization.email,
+        }
+
+        complete_event_data = dict(misp_event_data)
+        complete_event_data['Attribute'] = [clean_attribute_for_misp(attr) for attr in attributes_list]
+
+        start_sharing_time = datetime.now()
+        sharing_results, summary = share_all(misp_servers_info, orgs_info, complete_event_data)
+        sharing_speed = datetime.now() - start_sharing_time
+
+        if summary["succeeded"] == 0:
+            return Response({
+                'error': 'Failed to share aggregated event with recipient/s.',
+                'details': sharing_results,
+            }, status=500)
+
+        # Mark every source event as shared and record one share log per event.
+        # EventShareLog.event is a required FK, so the aggregate share is traced
+        # against each of its source events (all logs carry the same aggregate data).
+        sharing_time = timezone.now()
+        misp_event_data['sharing_results'] = sharing_results
+        for source_event in source_events:
+            source_event.shared = True
+            source_event.shared_at = sharing_time
+            source_event.anon_time = anon_time
+            source_event.sharing_speed = sharing_speed
+            source_event.timeliness = (
+                sharing_time - source_event.arrival_time if source_event.arrival_time else None
+            )
+            source_event.save()
+            EventShareLog.objects.create(
+                event=source_event,
+                shared_by=request.user,
+                data=misp_event_data,
+                shared_at=sharing_time,
+            )
+
+        return Response({
+            'message': 'Aggregated event shared with selected MISP servers.',
+            'results': sharing_results,
+        }, status=200)
+
 
 class RemoteIncidentView(APIView):
     permission_classes = [IsAuthenticated]

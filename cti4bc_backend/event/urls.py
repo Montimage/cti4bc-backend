@@ -6,6 +6,7 @@ urlpatterns = [
     path('<int:id>/', views.GetEventById.as_view(), name='get_by_id'),
     path('', views.GetEventsView.as_view(), name='get_all'),
     path('share/<int:id>/', views.ShareEventView.as_view(), name='share_event'),
+    path('share-aggregated/', views.ShareAggregatedEventView.as_view(), name='share_aggregated_event'),
     path('share-logs/', views.GetEventShareLogsView.as_view(), name='share_logs'),
     path('remote_incident/', views.RemoteIncidentView.as_view(), name='remote_incident'),
     path('update-share-status/<int:id>/', views.UpdateEventShareStatusView.as_view(), name='update_share_status'),
