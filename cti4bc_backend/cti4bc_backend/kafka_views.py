@@ -144,7 +144,6 @@ class EnvVariablesView(APIView):
         env_vars = {
             'KAFKA_SERVER': settings.KAFKA_SERVER,
             'KAFKA_USERNAME': settings.KAFKA_USERNAME,
-            'KAFKA_PASSWORD': '*****' if settings.KAFKA_PASSWORD else 'Not set',
             # Add other variables as needed
         }
         
