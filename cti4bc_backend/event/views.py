@@ -1,3 +1,4 @@
+from certsync_training.contract import validate_targets, training_org, event_organizations
 from django.http import JsonResponse
 from .models import Event, Organization, EventShareLog
 from event_files.models import EventAttachment
@@ -33,11 +34,11 @@ class GetEventsView(APIView):
         # Prefetch organization + its NIS2 sectors to avoid N+1 queries
         base_qs = Event.objects.select_related('organization').prefetch_related('organization__sectors')
         # Superusers can see all events
-        if request.user.is_staff:
+        if request.user.is_staff and training_org(request.user) is None:
             events = base_qs.all()
         else:
             # Regular users can only see events from their organizations
-            user_organizations = request.user.organizations.all()
+            user_organizations = event_organizations(request.user)
             if user_organizations.exists():
                 events = base_qs.filter(organization__in=user_organizations)
             else:
@@ -63,8 +64,8 @@ class GetEventById(APIView):
             event = Event.objects.get(id=id)
 
             # Check permissions - only superusers and organization members can see details
-            if not request.user.is_staff:
-                user_organizations = request.user.organizations.all()
+            if not request.user.is_staff or training_org(request.user) is not None:
+                user_organizations = event_organizations(request.user)
                 if not user_organizations.filter(id=event.organization.id).exists():
                     return Response({'error': 'Unauthorized'}, status=403)
 
@@ -115,8 +116,8 @@ class ShareEventView(APIView):
     permission_classes = [IsAuthenticated]
     def post(self, request, id):
         event_backend = get_object_or_404(Event, id=id)
-        if not request.user.is_staff:
-            user_organizations = request.user.organizations.all()
+        if not request.user.is_staff or training_org(request.user) is not None:
+            user_organizations = event_organizations(request.user)
             if not user_organizations.filter(id=event_backend.organization.id).exists():
                 return Response({'error': 'Unauthorized'}, status=403)
             
@@ -129,6 +130,7 @@ class ShareEventView(APIView):
         misp_server_ids = request.data.get('misp_server_ids', [])
         # Get organization IDs from the request
         org_ids = request.data.get('organization_ids', [])
+        training_destination = validate_targets(request.user, misp_server_ids, org_ids)
         
         # If no recipients are specified, return an error
         if not misp_server_ids and not org_ids:
@@ -144,8 +146,8 @@ class ShareEventView(APIView):
                 return Response({'error': 'No valid MISP servers found with the provided IDs.'}, status=400)
 
             # Validate that the user has access to all specified MISP servers
-            if not request.user.is_staff:
-                user_orgs = set(request.user.organizations.all())
+            if not request.user.is_staff or training_org(request.user) is not None:
+                user_orgs = set(event_organizations(request.user))
                 for server in misp_servers:
                     server_orgs = set(server.organizations.all())
                     if user_orgs.isdisjoint(server_orgs):
@@ -258,7 +260,7 @@ class ShareEventView(APIView):
         
         start_sharing_time = datetime.now()
 
-        sharing_results, summary = share_all(misp_servers_info, orgs_info, complete_event_data)
+        sharing_results, summary = share_all(misp_servers_info, orgs_info, complete_event_data, training_org=training_destination)
                 
         finish_sharing_time = datetime.now()
         event_backend.sharing_speed = finish_sharing_time - start_sharing_time
@@ -333,8 +335,8 @@ class AggregateEventsView(APIView):
 
         # Scope events to what the user is allowed to see (same rule as GetEventsView)
         base_qs = Event.objects.all()
-        if not request.user.is_staff:
-            user_organizations = request.user.organizations.all()
+        if not request.user.is_staff or training_org(request.user) is not None:
+            user_organizations = event_organizations(request.user)
             base_qs = base_qs.filter(organization__in=user_organizations)
 
         events = base_qs.filter(id__in=event_ids)
@@ -363,6 +365,7 @@ class ShareAggregatedEventView(APIView):
     def post(self, request):
         misp_server_ids = request.data.get('misp_server_ids', [])
         org_ids = request.data.get('organization_ids', [])
+        training_destination = validate_targets(request.user, misp_server_ids, org_ids)
         if not misp_server_ids and not org_ids:
             return Response({'error': 'No recipients specified for sharing.'}, status=400)
 
@@ -372,8 +375,8 @@ class ShareAggregatedEventView(APIView):
         if not isinstance(event_ids, list) or not event_ids:
             return Response({'error': 'eventsId (source events of the aggregation) is required.'}, status=400)
         base_qs = Event.objects.all()
-        if not request.user.is_staff:
-            base_qs = base_qs.filter(organization__in=request.user.organizations.all())
+        if not request.user.is_staff or training_org(request.user) is not None:
+            base_qs = base_qs.filter(organization__in=event_organizations(request.user))
         source_events = list(base_qs.filter(id__in=event_ids))
         if not source_events:
             return Response({'error': 'No permitted source events found for this aggregation.'}, status=400)
@@ -385,8 +388,8 @@ class ShareAggregatedEventView(APIView):
             misp_servers = MISPServer.objects.filter(id__in=misp_server_ids)
             if not misp_servers.exists():
                 return Response({'error': 'No valid MISP servers found with the provided IDs.'}, status=400)
-            if not request.user.is_staff:
-                user_orgs = set(request.user.organizations.all())
+            if not request.user.is_staff or training_org(request.user) is not None:
+                user_orgs = set(event_organizations(request.user))
                 for server in misp_servers:
                     if user_orgs.isdisjoint(set(server.organizations.all())):
                         return Response({'error': f'Unauthorized access to MISP server: {server.name}'}, status=403)
@@ -456,7 +459,7 @@ class ShareAggregatedEventView(APIView):
         complete_event_data['Attribute'] = [clean_attribute_for_misp(attr) for attr in attributes_list]
 
         start_sharing_time = datetime.now()
-        sharing_results, summary = share_all(misp_servers_info, orgs_info, complete_event_data)
+        sharing_results, summary = share_all(misp_servers_info, orgs_info, complete_event_data, training_org=training_destination)
         sharing_speed = datetime.now() - start_sharing_time
 
         if summary["succeeded"] == 0:
@@ -511,14 +514,14 @@ class GetEventShareLogsView(APIView):
         end_date = request.GET.get('end_date')
 
         # Base queryset - different for superusers and normal users
-        if request.user.is_staff:
+        if request.user.is_staff and training_org(request.user) is None:
             # Superusers can see all logs
             share_logs = EventShareLog.objects.select_related('event', 'event__organization', 'shared_by', 'deleted_by').all()
             # All organizations for filters
             organizations = Organization.objects.all()
         else:
             # Regular users can only see logs from their organizations
-            user_organizations = request.user.organizations.all()
+            user_organizations = event_organizations(request.user)
             if user_organizations.exists():
                 share_logs = EventShareLog.objects.select_related('event', 'event__organization', 'shared_by', 'deleted_by').filter(event__organization__in=user_organizations)
                 # Only their organizations for filters
@@ -581,8 +584,8 @@ class UpdateEventShareStatusView(APIView):
     def post(self, request, id):
         event_backend = get_object_or_404(Event, id=id)
         
-        if not request.user.is_staff:
-            user_organizations = request.user.organizations.all()
+        if not request.user.is_staff or training_org(request.user) is not None:
+            user_organizations = event_organizations(request.user)
             if not user_organizations.filter(id=event_backend.organization.id).exists():
                 return Response({'error': 'Unauthorized'}, status=403)
         
@@ -618,7 +621,9 @@ def new_security_alert(message, topic):
     arrival_time = timezone.now()
 
     # Extract organization prefix from topic
-    match = re.match(r'^(UC\d+)\.', topic)
+    from certsync_training.contract import enabled
+    pattern = r'^([A-Za-z0-9-]{1,10})\.' if enabled() else r'^(UC\d+)\.'
+    match = re.match(pattern, topic)
     use_case_prefix = match.group(1) if match else None
     organization = Organization.objects.get(prefix=use_case_prefix)
     
@@ -917,8 +922,8 @@ class UpdateRiskProfileView(APIView):
         event = get_object_or_404(Event, id=id)
 
         # Authorization check
-        if not request.user.is_staff:
-            user_organizations = request.user.organizations.all()
+        if not request.user.is_staff or training_org(request.user) is not None:
+            user_organizations = event_organizations(request.user)
             if not user_organizations.filter(id=event.organization.id).exists():
                 return Response({'error': 'Unauthorized'}, status=403)
         
@@ -949,8 +954,8 @@ class UpdatePlaybookView(APIView):
         event = get_object_or_404(Event, id=id)
 
         # Authorization check
-        if not request.user.is_staff:
-            user_organizations = request.user.organizations.all()
+        if not request.user.is_staff or training_org(request.user) is not None:
+            user_organizations = event_organizations(request.user)
             if not user_organizations.filter(id=event.organization.id).exists():
                 return Response({'error': 'Unauthorized'}, status=403)
         
@@ -981,8 +986,8 @@ class UpdateSoarResultView(APIView):
         event = get_object_or_404(Event, id=id)
 
         # Authorization check
-        if not request.user.is_staff:
-            user_organizations = request.user.organizations.all()
+        if not request.user.is_staff or training_org(request.user) is not None:
+            user_organizations = event_organizations(request.user)
             if not user_organizations.filter(id=event.organization.id).exists():
                 return Response({'error': 'Unauthorized'}, status=403)
         

@@ -66,10 +66,12 @@ async def _run_sharing_tasks(misp_servers, orgs, data):
     results = await asyncio.gather(*tasks, return_exceptions=True)
     return results
 
-def share_all(misp_servers, orgs, data):
+def share_all(misp_servers, orgs, data, training_org=None):
     """
     Main function to share event to all configured MISP servers and organizations
     """
+    from certsync_training.contract import addressed_copy
+    data = addressed_copy(data, training_org, misp_servers, orgs)
     results = asyncio.run(_run_sharing_tasks(misp_servers, orgs, data))
 
     summary = {

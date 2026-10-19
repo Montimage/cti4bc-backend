@@ -20,6 +20,8 @@ class KafkaConsumerThread:
         self.handlers = handlers
         self.thread = None
         self.stop_event = Event()
+        self.ready_event = Event()
+        self.assigned_topics = set()
     
     def consume_messages(self):
         """
@@ -54,6 +56,8 @@ class KafkaConsumerThread:
                     if consumer.assignment():
                         consumer.seek_to_end()
                         assigned = True
+                        self.assigned_topics = {p.topic for p in consumer.assignment()}
+                        self.ready_event.set()
                         logging.info(f"Partitions assigned, seeked to end: {list(consumer.assignment())}")
                     else:
                         waited += 0.25
@@ -61,6 +65,7 @@ class KafkaConsumerThread:
                 logging.info("Starting main consumer loop")
                 while not self.stop_event.is_set():
                     msg_pack = consumer.poll(timeout_ms=1000)
+                    self.assigned_topics = {p.topic for p in consumer.assignment()}
                     
                     if self.stop_event.is_set():
                         logging.info("Stop event detected, breaking out of consumer loop")
@@ -108,6 +113,8 @@ class KafkaConsumerThread:
         
         logging.info("Starting new consumer thread")
         self.stop_event.clear()
+        self.ready_event.clear()
+        self.assigned_topics = set()
         self.thread = Thread(target=self.consume_messages)
         self.thread.start()
         logging.info("Consumer thread started.")

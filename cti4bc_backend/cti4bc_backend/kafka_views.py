@@ -76,6 +76,13 @@ class StartConsumerView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        from certsync_training.contract import enabled
+        if enabled():
+            if not request.user.is_staff:
+                return Response(status=403)
+            from certsync_training.consumer import ensure_consumer
+            ready, all_topics = ensure_consumer()
+            return Response({"status": "Consumer ready" if ready else "Consumer not ready; check topic setup and restart", "topics": all_topics}, status=200 if ready else 503)
         global consumer_manager, message_history
         topics = request.data.get('topics', [])
         if not topics:

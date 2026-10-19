@@ -1,3 +1,5 @@
+from certsync_training.contract import training_org, event_organizations
+from django.conf import settings
 from django.shortcuts import render, get_object_or_404
 from rest_framework import viewsets, permissions
 from rest_framework.response import Response
@@ -19,6 +21,8 @@ class MISPServerViewSet(viewsets.ModelViewSet):
         A user can only see servers belonging to their organization.
         """
         user = self.request.user
+        if training_org(user):
+            return MISPServer.objects.filter(organizations=training_org(user), url__in=[settings.CERTSYNC_PLATFORM_MISP_URL, settings.CERTSYNC_PLATFORM_MISP_URL.rstrip("/") + "/"]).distinct()
         if user.is_superuser:
             return MISPServer.objects.all()
         return MISPServer.objects.filter(organizations__in=user.organizations.all()).distinct()
@@ -38,11 +42,13 @@ class MISPServerViewSet(viewsets.ModelViewSet):
             event = Event.objects.get(id=event_id)
             
             # Check permissions
-            if not user.is_staff and not user.organizations.filter(id=event.organization.id).exists():
+            if (not user.is_staff or training_org(user)) and not event_organizations(user).filter(id=event.organization.id).exists():
                 return Response({"error": "You don't have access to this event"}, status=403)
             
             # Get MISP servers from the same organization as the event
             misp_servers = MISPServer.objects.filter(organizations=event.organization)
+            if training_org(user):
+                misp_servers = misp_servers.filter(pk__in=self.get_queryset())
             
             # Serialize the data and return the response
             serializer = self.get_serializer(misp_servers, many=True)

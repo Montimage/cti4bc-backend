@@ -58,3 +58,9 @@ urlpatterns = [
 # Serve media files in development mode
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# The endpoints themselves return 404 while the integration is disabled.
+from certsync_training.views import SsoView, ConsumerReadyView
+urlpatterns += [
+    path("api/certsync-training/sso/", SsoView.as_view()),
+    path("api/certsync-training/consumer-ready/", ConsumerReadyView.as_view()),
+]

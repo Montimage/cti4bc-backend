@@ -274,3 +274,16 @@ Q_CLUSTER = {
     'catch_up': False,             # skip missed scheduled tasks after downtime
     'label': 'Django Q2',
 }
+# Optional CERT-Synchrony webinar integration. Empty secret or switch off
+# preserves the partner's normal authentication, sharing and framing behaviour.
+CERTSYNC_TRAINING_ENABLED = config("CERTSYNC_TRAINING_ENABLED", default=False, cast=bool)
+CTI4BC_SSO_SECRET = config("CTI4BC_SSO_SECRET", default="")
+CERTSYNC_PLATFORM_MISP_URL = config("CERTSYNC_PLATFORM_MISP_URL", default="")
+CERTSYNC_FRAME_ANCESTORS = config("CERTSYNC_FRAME_ANCESTORS", default="https://certsync-platform.montimage.eu")
+TRAINING_ORG_PREFIX = config("TRAINING_ORG_PREFIX", default="TRAIN-")
+TRAINING_ORG_COUNT = config("TRAINING_ORG_COUNT", default=25, cast=int)
+INSTALLED_APPS += ["certsync_training"]
+MIDDLEWARE.insert(0, "certsync_training.middleware.TrainingBoundaryMiddleware")
+if CERTSYNC_TRAINING_ENABLED and len(CTI4BC_SSO_SECRET.encode()) >= 32:
+    REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"] = ("certsync_training.auth.TrainingJWTAuthentication",)
+    SIMPLE_JWT["TOKEN_REFRESH_SERIALIZER"] = "certsync_training.auth.TrainingRefreshSerializer"

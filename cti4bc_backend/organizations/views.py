@@ -1,3 +1,4 @@
+from certsync_training.contract import training_org, event_organizations
 from django.shortcuts import render
 from rest_framework import status
 from rest_framework.views import APIView
@@ -15,12 +16,12 @@ class OrganizationListView(APIView):
         """
         Get all organizations (for form selection)
         """
-        if request.user.is_staff:
+        if request.user.is_staff and training_org(request.user) is None:
             # Superusers can see all organizations
             organizations = Organization.objects.all()
         else:
             # Regular users can only see their organizations
-            organizations = request.user.organizations.all()
+            organizations = event_organizations(request.user)
 
         # Simple serialization
         data = [
