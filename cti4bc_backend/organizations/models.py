@@ -10,7 +10,7 @@ class Organization(models.Model):
         description (TextField): A brief description of the organization.
         email (EmailField): The contact email for the organization.
         external_id (CharField): MISP identifier for the organization.
-        prefix (CharField): A unique prefix associated with the organization. (In the format UCX, where X is a number)
+        prefix (CharField): A unique prefix associated with the organization, used as the first segment of its Kafka topics (e.g. UC1, CERT, T04).
         users (ManyToManyField): The users associated with the organization.
       
     """
@@ -19,7 +19,7 @@ class Organization(models.Model):
     description = models.TextField(blank=True)
     email = models.EmailField(max_length=254, blank=True)
     external_id = models.CharField(max_length=100, null=False)
-    prefix = models.CharField(max_length=10, unique=True, null=False)
+    prefix = models.CharField(max_length=32, unique=True, null=False)
     users = models.ManyToManyField(User, blank=True, related_name='organizations')
     sectors = models.ManyToManyField('Sector', blank=True, related_name='organizations')
 

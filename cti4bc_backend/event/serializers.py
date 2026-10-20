@@ -64,17 +64,27 @@ class ArtifactSerializer(serializers.Serializer):
     share = serializers.BooleanField()
 
 class ShareEventSerializer(serializers.Serializer):
+    """
+    Validates the payload sent to /event/share/<id>/.
+
+    Only `date` and `info` are really needed here: ShareEventView rebuilds the
+    MISP event itself and derives org_id / orgc_id / event_creator_email from
+    the event's Organization, falling back to its own defaults for everything
+    else. Keeping the remaining fields optional and untyped-as-string avoids
+    rejecting events whose stored `data` uses a MISP org UUID/name for org_id
+    or carries no creator email at all.
+    """
     date = serializers.DictField(required = True)
     info = serializers.CharField(required = True)
-    org_id = serializers.IntegerField(required = True)
-    orgc_id = serializers.IntegerField(required = True)
-    analysis = serializers.CharField()
+    org_id = serializers.CharField(required = False, allow_blank = True)
+    orgc_id = serializers.CharField(required = False, allow_blank = True)
+    analysis = serializers.CharField(required = False, allow_blank = True)
     Attribute = AttributeSerializer(required = False, default={})
     published = serializers.BooleanField(default=False)
-    distribution = serializers.CharField()
-    threat_level_id = serializers.CharField()
+    distribution = serializers.CharField(required = False, allow_blank = True)
+    threat_level_id = serializers.CharField(required = False, allow_blank = True)
     disable_correlation = serializers.BooleanField(default=False)
-    event_creator_email = serializers.EmailField()
+    event_creator_email = serializers.EmailField(required = False, allow_blank = True)
     proposal_email_lock = serializers.BooleanField(default=False)
     locked = serializers.BooleanField(default=False)
     artifacts = ArtifactSerializer(many=True, required=False, default=[])

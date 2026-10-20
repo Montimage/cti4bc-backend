@@ -123,7 +123,15 @@ class ShareEventView(APIView):
             
         serializer = ShareEventSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response(serializer.errors, status=400)
+            # Keep an `error` key so the UI has something to display, and the
+            # per-field errors under `details` for diagnosis.
+            return Response({
+                'error': 'Invalid event payload: ' + '; '.join(
+                    f'{field}: {" ".join(str(m) for m in messages)}'
+                    for field, messages in serializer.errors.items()
+                ),
+                'details': serializer.errors,
+            }, status=400)
         data = serializer.validated_data
     
         # Get the list of MISP server IDs from the request
@@ -234,17 +242,17 @@ class ShareEventView(APIView):
         # Format data in MISP standard format
         misp_event_data = {
             'org_id': str(event_backend.organization.external_id),
-            'distribution': data.get('distribution', '0'),
+            'distribution': data.get('distribution') or '0',
             'info': data.get('info', event_backend.data.get('info', 'No information available')),
             'orgc_id': str(event_backend.organization.external_id),
             'date': date_value,
             'published': data.get('published', False),
-            'analysis': data.get('analysis', '0'),
+            'analysis': data.get('analysis') or '0',
             'timestamp': str(current_timestamp),
             'sharing_group_id': "1",
             'proposal_email_lock': data.get('proposal_email_lock', False),
             'locked': data.get('locked', False),
-            'threat_level_id': data.get('threat_level_id', '1'),
+            'threat_level_id': data.get('threat_level_id') or '1',
             'publish_timestamp': str(current_timestamp),
             'sighting_timestamp': str(current_timestamp),
             'disable_correlation': data.get('disable_correlation', False),
@@ -620,10 +628,10 @@ class UpdateEventShareStatusView(APIView):
 def new_security_alert(message, topic):
     arrival_time = timezone.now()
 
-    # Extract organization prefix from topic
-    from certsync_training.contract import enabled
-    pattern = r'^([A-Za-z0-9-]{1,10})\.' if enabled() else r'^(UC\d+)\.'
-    match = re.match(pattern, topic)
+    # Extract organization prefix from topic. The prefix is the first dot-separated
+    # segment; it used to be restricted to the UC<digits> form, which excluded the
+    # short codes actually in use (MI, CERT, ACME, T04) and any longer organization name.
+    match = re.match(r'^([A-Za-z0-9_-]+)\.', topic)
     use_case_prefix = match.group(1) if match else None
     organization = Organization.objects.get(prefix=use_case_prefix)
     

@@ -106,3 +106,18 @@ python manage.py makemigrations certsync_training --check --dry-run \
 Install the normal application dependencies first. External sharing is mocked;
 no real cryptography key is opened. See the workspace
 `guides/TRAINING_SIMULATOR_VPS.md` for deployment and rollback.
+
+## Deployment modifications carried on this branch
+
+The VPS deployment ran `main` plus three uncommitted changes, documented in the
+simulator's `docs/cti4bc-modifications.md` (modifications 1–3). This branch
+carries them verbatim, **unconditionally**, so switching the deployment to it
+changes nothing while the training switch is off:
+
+1. `organizations/models.py`: `prefix` up to 32 characters, with migration
+   `0010_alter_organization_prefix` (same name and content as the one already
+   applied there);
+2. `event/views.py`, `new_security_alert`: the topic prefix is the first segment
+   (`^([A-Za-z0-9_-]+)\.`), not only `UC<digits>`;
+3. `event/serializers.py` and `ShareEventView`: the share payload's optional
+   fields are optional, and a refused payload answers with an `error` message.

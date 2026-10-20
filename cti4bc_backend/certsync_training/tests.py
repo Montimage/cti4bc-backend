@@ -173,11 +173,15 @@ class IntegrationTests(TestCase):
             self.assertFalse(ensure_consumer(timeout=0)[0])
             manager.stop.assert_not_called()
 
-    def test_training_topic_parser_and_original_off_parser(self):
+    def test_topic_prefix_is_the_first_segment_with_training_on_or_off(self):
+        """The deployed parser (modification 2 in the simulator's
+        docs/cti4bc-modifications.md) takes any first segment, not just UC<n>,
+        so T04 resolves with the training switch on or off."""
         from event.views import new_security_alert
         with patch('event.views.parse_alert_message', side_effect=ValueError('synthetic parse stop')):
-            with self.assertLogs('event.views', level='ERROR'):
-                self.assertEqual(new_security_alert('{}', 'T04.HEALTHCI.security_alerts').status_code, 400)
-            with override_settings(CERTSYNC_TRAINING_ENABLED=False):
-                with self.assertRaises(Organization.DoesNotExist):
-                    new_security_alert('{}', 'T04.HEALTHCI.security_alerts')
+            for enabled in (True, False):
+                with override_settings(CERTSYNC_TRAINING_ENABLED=enabled):
+                    with self.assertLogs('event.views', level='ERROR'):
+                        self.assertEqual(new_security_alert('{}', 'T04.HEALTHCI.security_alerts').status_code, 400)
+            with self.assertRaises(Organization.DoesNotExist):
+                new_security_alert('{}', 'NOPE.HEALTHCI.security_alerts')
