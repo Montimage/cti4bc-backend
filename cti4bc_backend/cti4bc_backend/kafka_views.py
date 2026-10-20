@@ -78,9 +78,16 @@ class StartConsumerView(APIView):
     def post(self, request):
         from certsync_training.contract import enabled
         if enabled():
-            if not request.user.is_staff:
+            # One shared consumer serves every participant. A non-staff client
+            # (e.g. the simulator's per-CERT account during an organiser's run)
+            # asking for topics it already covers joins it instead of being
+            # refused; anything else stays staff-only.
+            from certsync_training.consumer import all_topics as training_topics, ensure_consumer
+            requested = request.data.get('topics', [])
+            if isinstance(requested, str):
+                requested = [requested]
+            if not request.user.is_staff and not (requested and set(requested) <= set(training_topics())):
                 return Response(status=403)
-            from certsync_training.consumer import ensure_consumer
             ready, all_topics = ensure_consumer()
             return Response({"status": "Consumer ready" if ready else "Consumer not ready; check topic setup and restart", "topics": all_topics}, status=200 if ready else 503)
         global consumer_manager, message_history
@@ -121,7 +128,12 @@ class StopConsumerView(APIView):
 
     def post(self, request):
         global consumer_manager, message_history
-        
+        from certsync_training.contract import enabled
+        if enabled() and not request.user.is_staff:
+            # Stopping the shared consumer would silently drop every trainee's
+            # alerts until the next restart: staff only while training is on.
+            return Response(status=403)
+
         if consumer_manager is not None:
             try:
                 consumer_manager.stop()

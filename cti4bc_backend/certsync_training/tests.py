@@ -2,7 +2,7 @@ import io
 import time
 import uuid
 from copy import deepcopy
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt
 from django.conf import settings
@@ -171,6 +171,24 @@ class IntegrationTests(TestCase):
             self.assertTrue(ensure_consumer(timeout=0)[0])
             Organization.objects.create(name='TRAIN-06', prefix='T06', external_id='7')
             self.assertFalse(ensure_consumer(timeout=0)[0])
+            manager.stop.assert_not_called()
+
+    def test_non_staff_joins_the_shared_consumer_and_cannot_stop_it(self):
+        from rest_framework.test import APIClient
+        from django.contrib.auth.models import User
+        from cti4bc_backend import kafka_views
+        from rest_framework_simplejwt.tokens import AccessToken
+        client = APIClient()
+        user = User.objects.create_user('cert-fr-sim-test')
+        client.credentials(HTTP_AUTHORIZATION='Bearer ' + str(AccessToken.for_user(user)))
+        known = __import__('certsync_training.consumer', fromlist=['all_topics']).all_topics()
+        with patch('certsync_training.consumer.ensure_consumer', return_value=(True, known)) as ensure:
+            self.assertEqual(client.post('/consumer/start/', {'topics': known[:1]}, format='json').status_code, 200)
+            ensure.assert_called_once()
+            self.assertEqual(client.post('/consumer/start/', {'topics': ['OTHER.topic']}, format='json').status_code, 403)
+        manager = MagicMock()
+        with patch.object(kafka_views, 'consumer_manager', manager):
+            self.assertEqual(client.post('/consumer/stop/').status_code, 403)
             manager.stop.assert_not_called()
 
     def test_topic_prefix_is_the_first_segment_with_training_on_or_off(self):
