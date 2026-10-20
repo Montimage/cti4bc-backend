@@ -74,6 +74,19 @@ class IntegrationTests(TestCase):
             self.assertLessEqual(set(response.json()), {'status', 'response_time', 'uptime', 'timestamp'}, path)
         self.assertEqual(self.client.get('/api/health/available-misp-servers/').status_code, 403)
 
+    def test_trainee_sees_the_platform_misp_by_a_plain_name_only(self):
+        self.signon()
+        response = self.client.get('/misp_servers/')
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        self.assertNotIn('misp.example', body)
+        self.assertNotIn('TRAIN-05', body)
+        servers = response.json()
+        servers = servers.get('results', servers) if isinstance(servers, dict) else servers
+        self.assertTrue(servers)
+        self.assertTrue(all(s['name'] == 'CERT-Synchrony platform' and s['url'] == ''
+                            and s['organization_names'] == ['TRAIN-04'] for s in servers))
+
     def test_admin_and_service_identity_are_separate(self):
         self.signon(role='admin', org='')
         self.assertTrue(get_user_model().objects.get(username='trainee').is_superuser)

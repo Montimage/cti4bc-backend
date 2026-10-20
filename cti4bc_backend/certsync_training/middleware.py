@@ -24,6 +24,36 @@ def _status_only(response):
     return JsonResponse({k: data[k] for k in _HEALTH_FIELDS if k in data}, status=response.status_code)
 
 
+# A trainee's view of the MISP server list: one plain name, no address, and
+# only their own organisation. The admin's entry name (e.g. "MISP A
+# (Hospital-46)"), the server address and the other participants'
+# organisations are not theirs to see.
+MISP_SERVERS_FOR_TRAINEE = object()
+
+
+def _trainee_servers(response, org):
+    import json
+    from django.conf import settings as conf
+    label = getattr(conf, "CERTSYNC_PLATFORM_MISP_LABEL", "") or "CERT-Synchrony platform"
+    try:
+        data = json.loads(response.content)
+    except (ValueError, AttributeError):
+        return response
+
+    def clean(server):
+        if isinstance(server, dict):
+            server.update(name=label, url="", organizations=[org.pk], organization_names=[org.name])
+        return server
+
+    if isinstance(data, list):
+        data = [clean(s) for s in data]
+    elif isinstance(data, dict) and isinstance(data.get("results"), list):
+        data["results"] = [clean(s) for s in data["results"]]
+    else:
+        data = clean(data)
+    return JsonResponse(data, status=response.status_code, safe=False)
+
+
 class TrainingBoundaryMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
@@ -33,6 +63,8 @@ class TrainingBoundaryMiddleware:
         response = self.check(request) if active else None
         if response is HEALTH_STATUS_ONLY:
             response = _status_only(self.get_response(request))
+        elif isinstance(response, tuple) and response[0] is MISP_SERVERS_FOR_TRAINEE:
+            response = _trainee_servers(self.get_response(request), response[1])
         elif response is None:
             response = self.get_response(request)
         if active:
@@ -77,7 +109,7 @@ class TrainingBoundaryMiddleware:
             # The views scope every source event before returning an aggregate.
             return None
         if read and path.startswith("/misp_servers/"):
-            return None
+            return (MISP_SERVERS_FOR_TRAINEE, org)
         match = re.fullmatch(r"/event_files/download/(\d+)/", path)
         if read and match:
             from event_files.models import EventAttachment
