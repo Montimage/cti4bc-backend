@@ -60,6 +60,17 @@ class SsoView(APIView):
                 user.is_active = True
                 user.is_staff = user.is_superuser = claims["role"] == "admin"
                 user.set_unusable_password()
+                # Show the participant's platform account name rather than the
+                # internal platform-<id>, when that name is free. The identity
+                # link, not the name, is what ties the two accounts.
+                wanted = re.sub(r"[^A-Za-z0-9.@+_-]", "-", claims["name"])[:150]
+                # Only real platform users (numeric sub); service identities
+                # such as simulator-<n> keep their technical name.
+                if (wanted and str(claims["sub"]).isdigit() and user.username.startswith("platform-")
+                        and wanted != user.username
+                        and not get_user_model().objects.filter(username=wanted).exists()):
+                    user.username = wanted
+                user.first_name = claims["name"][:150]
                 user.save()
                 if org is not None:
                     user.organizations.set([org])

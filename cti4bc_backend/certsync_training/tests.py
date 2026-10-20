@@ -43,12 +43,12 @@ class IntegrationTests(TestCase):
 
     def test_signon_reuses_user_exact_membership_and_revokes_old_session(self):
         first = self.signon()
-        user = get_user_model().objects.get(username='platform-42')
+        user = get_user_model().objects.get(username='trainee')
         self.assertFalse(user.has_usable_password())
         self.assertFalse(user.is_staff)
         user.organizations.add(self.other)
         second = self.signon()
-        self.assertEqual(get_user_model().objects.filter(username='platform-42').count(), 1)
+        self.assertEqual(get_user_model().objects.filter(username='trainee').count(), 1)
         self.assertEqual(list(user.organizations.values_list('name', flat=True)), ['TRAIN-04'])
         self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + first.data['access'])
         self.assertEqual(self.client.get('/event/').status_code, 403)
@@ -66,9 +66,17 @@ class IntegrationTests(TestCase):
         self.assertEqual(self.client.post('/api/certsync-training/sso/', {'token': token(exp=int(time.time())-40, iat=int(time.time())-100)}).status_code, 403)
         self.assertEqual(self.client.post('/api/certsync-training/sso/', {'token': token(org='CERT-FR')}).status_code, 403)
 
+    def test_trainee_sees_health_status_without_infrastructure_details(self):
+        self.signon()
+        for path in ('/api/health/database/', '/api/health/message-queue/', '/api/health/external-services/'):
+            response = self.client.get(path)
+            self.assertNotEqual(response.status_code, 403, path)
+            self.assertLessEqual(set(response.json()), {'status', 'response_time', 'uptime', 'timestamp'}, path)
+        self.assertEqual(self.client.get('/api/health/available-misp-servers/').status_code, 403)
+
     def test_admin_and_service_identity_are_separate(self):
         self.signon(role='admin', org='')
-        self.assertTrue(get_user_model().objects.get(username='platform-42').is_superuser)
+        self.assertTrue(get_user_model().objects.get(username='trainee').is_superuser)
         self.signon(sub='simulator-42')
         service = get_user_model().objects.get(username='platform-simulator-42')
         self.assertFalse(service.is_staff)
@@ -83,11 +91,11 @@ class IntegrationTests(TestCase):
         self.assertEqual(self.client.get(f'/event/{own.pk}/').status_code, 200)
         self.assertEqual(self.client.get(f'/event/{other.pk}/').status_code, 403)
         self.assertEqual(self.client.get(f'/event/{own.pk}').status_code, 301)
-        for path in ('/consumer/env/', '/consumer/messages/', '/organizations/summary/', '/api/health/external-services/', '/media/anything'):
+        for path in ('/consumer/env/', '/consumer/messages/', '/organizations/summary/', '/media/anything'):
             self.assertEqual(self.client.get(path).status_code, 403)
         self.assertEqual(self.client.post('/misp_servers/', {}).status_code, 403)
         self.assertEqual(self.client.post(f'/event/update_risk_profile/{other.pk}/', {}).status_code, 403)
-        user = get_user_model().objects.get(username='platform-42')
+        user = get_user_model().objects.get(username='trainee')
         user.is_staff = True
         user.save()
         user.organizations.add(self.other)

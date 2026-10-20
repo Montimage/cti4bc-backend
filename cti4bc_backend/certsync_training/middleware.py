@@ -7,6 +7,23 @@ from .auth import TrainingJWTAuthentication
 from .contract import enabled, training_org
 
 
+# A trainee's view of the system-health page: the state, without the details
+# (server addresses, broker host) that the full answer carries.
+HEALTH_STATUS_ONLY = object()
+_HEALTH_PATHS = ("/api/health/database/", "/api/health/api-server/",
+                 "/api/health/external-services/", "/api/health/message-queue/")
+_HEALTH_FIELDS = ("status", "response_time", "uptime", "timestamp")
+
+
+def _status_only(response):
+    import json
+    try:
+        data = json.loads(response.content)
+    except (ValueError, AttributeError):
+        return JsonResponse({"status": "critical"}, status=response.status_code)
+    return JsonResponse({k: data[k] for k in _HEALTH_FIELDS if k in data}, status=response.status_code)
+
+
 class TrainingBoundaryMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
@@ -14,7 +31,9 @@ class TrainingBoundaryMiddleware:
     def __call__(self, request):
         active = enabled()
         response = self.check(request) if active else None
-        if response is None:
+        if response is HEALTH_STATUS_ONLY:
+            response = _status_only(self.get_response(request))
+        elif response is None:
             response = self.get_response(request)
         if active:
             response.headers.pop("X-Frame-Options", None)
@@ -43,6 +62,8 @@ class TrainingBoundaryMiddleware:
         # These lists and detail views already enforce membership. Everything
         # else is denied unless explicitly scoped below, including raw media.
         read = request.method in ("GET", "HEAD", "OPTIONS")
+        if read and path in _HEALTH_PATHS:
+            return HEALTH_STATUS_ONLY
         if read and path in ("/event/", "/event/share-logs/", "/organizations/", "/api/users/info/", "/strategy/"):
             return None
         if path == "/api/certsync-training/consumer-ready/" and request.method == "POST":
