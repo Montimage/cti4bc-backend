@@ -3,8 +3,8 @@
 This branch adds an optional webinar integration. `CERTSYNC_TRAINING_ENABLED=false`
 (the default), or an empty SSO secret, retains normal CTI4BC authentication,
 visibility, sharing output and topic parsing. No production credentials or
-cryptography keys are included. Coordinate deployment with Valeria and the
-colleague maintaining CTI4BC.
+cryptography keys are included. This branch is CERT-Synchrony's own; coordinate
+deployment with the colleague maintaining the CTI4BC instance on the VPS.
 
 ## Configuration
 
