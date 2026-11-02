@@ -131,7 +131,19 @@ def parse_soar_playbook_into_attributes(data):
         list: A list of MISP attributes.
     """
     attributes = []
-    
+
+    # The playbook's own name (CACAO "name"), so CERT-Synchrony can show it.
+    # No ", Commands:" part, so it is never read as a step.
+    name = str(data.get('name') or '').strip() if isinstance(data, dict) else ''
+    if name:
+        attributes.append({
+            'type': 'text',
+            'category': 'Internal reference',
+            'value': f"Playbook: {name}",
+            'comment': 'Playbook name',
+            'to_ids': False
+        })
+
     # Safely handle the workflow data structure
     workflow = data.get('workflow', {})
     
