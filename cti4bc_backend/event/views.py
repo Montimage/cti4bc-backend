@@ -24,6 +24,9 @@ from public_key.models import PublicKey
 from .utils_sharing import share_all, produce_message
 import logging
 from dateutil import parser
+from .utils import prepare_monitoring_event
+import requests
+from rest_framework import status
 
 logger = logging.getLogger(__name__)
 
@@ -491,15 +494,53 @@ class ShareAggregatedEventView(APIView):
             'results': sharing_results,
         }, status=200)
 
-
 class RemoteIncidentView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        data = request.data
-        cti_remote_topic = settings.CTI_REMOTE_TOPIC
-        produce_message(cti_remote_topic, data)
-        return Response({'message': 'Remote incident.'}, status=200)
+        try:
+            payload = prepare_monitoring_event(request.data)
+
+        except ValueError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        endpoint = settings.PROPERTY_GENERATION_URL
+
+        if not endpoint:
+            return Response(
+                {"error": "Property Generation URL not configured."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+
+        try:
+            response = requests.post(
+                endpoint,
+                json=payload,
+                timeout=10
+            )
+            response.raise_for_status()
+
+        except requests.RequestException:
+            logger.exception(
+                "Failed to forward remote incident."
+            )
+            return Response(
+                {"error": "Property Generation service unavailable."},
+                status=status.HTTP_502_BAD_GATEWAY
+            )
+
+        return Response(
+            {
+                "message": "Remote incident forwarded.",
+                "attributes_forwarded": len(
+                    payload["event"]["Event"]["Attribute"]
+                )
+            },
+            status=status.HTTP_200_OK
+        )
 
 class GetEventShareLogsView(APIView):
     permission_classes = [IsAuthenticated]

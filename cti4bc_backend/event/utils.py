@@ -261,3 +261,63 @@ def parse_soar_result(soar_message: dict) -> list[dict]:
         'to_ids': False
     }
     return [attribute]
+
+def prepare_monitoring_event(data):
+    """
+    Extract monitoring-relevant information from a MISP event.
+    """
+
+    if not isinstance(data, dict):
+        raise ValueError("Invalid MISP payload.")
+
+    event = data.get("Event")
+    if not isinstance(event, dict):
+        raise ValueError("Missing or invalid Event object.")
+
+    info = event.get("info")
+    if not isinstance(info, str) or not info.strip():
+        raise ValueError("Event.info is required.")
+
+    attributes = event.get("Attribute", [])
+    if not isinstance(attributes, list):
+        raise ValueError("Event.Attribute must be a list.")
+
+    relevant_attributes = []
+
+    for attribute in attributes:
+        if not isinstance(attribute, dict):
+            continue
+
+        # Initially consider only descriptive attributes.
+        if attribute.get("type") != "text":
+            continue
+
+        value = attribute.get("value")
+        if not isinstance(value, str) or not value.strip():
+            continue
+
+        simplified = {
+            "type": "text",
+            "value": value.strip()
+        }
+
+        comment = attribute.get("comment")
+        if isinstance(comment, str) and comment.strip():
+            simplified["comment"] = comment.strip()
+
+        relevant_attributes.append(simplified)
+
+    if not relevant_attributes:
+        raise ValueError(
+            "No relevant descriptive attributes found."
+        )
+
+    return {
+        "source": "CTI4BC",
+        "event": {
+            "Event": {
+                "info": info.strip(),
+                "Attribute": relevant_attributes
+            }
+        }
+    }

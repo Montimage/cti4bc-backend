@@ -140,6 +140,10 @@ KAFKA_PASSWORD=kafka_password        # Password for Kafka authentication (if req
 # -------------------------------
 CTI_REMOTE_TOPIC= CTI4BC.events      # Topic for sharing CTI events with other organizations
 RISK_TOPIC=RISK4BC.riskProfile       # Topic for receiving risk assessment information from RISK4BC
+# -------------------------------
+# Property Generation
+# -------------------------------
+PROPERTY_GENERATION_URL=http://property-generation.example.com/endpoint  # Endpoint that receives remote incidents forwarded by /remote_incident/ (if unset, that endpoint returns 503)
 ```
 
 6. Apply database migrations and create an admin user:

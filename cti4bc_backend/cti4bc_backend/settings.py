@@ -260,6 +260,9 @@ LLM_PROVIDER = config('LLM_PROVIDER', default='gemini')  # gemini, ollama
 OLLAMA_URL = config('OLLAMA_URL', default='http://localhost:11434')
 OLLAMA_MODEL = config('OLLAMA_MODEL', default='llama3.1:8b')
 
+# Property Generation Endpoint
+PROPERTY_GENERATION_URL = config('PROPERTY_GENERATION_URL', default=None)
+
 # Django-Q2 task queue configuration
 # Uses the existing PostgreSQL database as the broker (ORM broker) — no Redis/Celery.
 # Report generation runs in the `qcluster` worker process, not in the HTTP request.
